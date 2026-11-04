@@ -1,0 +1,11 @@
+.git
+.env
+.env.*
+!.env.example
+dashboard/
+xampp/
+webalizer/
+vendor/
+node_modules/
+*.log
+*.tmp
