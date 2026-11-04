@@ -6,12 +6,20 @@ CREATE TABLE IF NOT EXISTS gcash_merchant_settings (
     gcash_account_number VARCHAR(30) NULL,
     qr_image MEDIUMBLOB NOT NULL,
     qr_mime_type VARCHAR(30) NOT NULL,
-    updated_by_user_id INT UNSIGNED NOT NULL,
+    updated_by_user_id INT UNSIGNED NULL,
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT chk_gcash_merchant_settings_singleton CHECK (settings_id = 1),
     CONSTRAINT fk_gcash_merchant_settings_user FOREIGN KEY (updated_by_user_id)
-        REFERENCES users(id) ON DELETE RESTRICT
+        REFERENCES users(id) ON DELETE SET NULL
 );
+
+ALTER TABLE gcash_merchant_settings
+    DROP FOREIGN KEY fk_gcash_merchant_settings_user;
+ALTER TABLE gcash_merchant_settings
+    MODIFY updated_by_user_id INT UNSIGNED NULL;
+ALTER TABLE gcash_merchant_settings
+    ADD CONSTRAINT fk_gcash_merchant_settings_user FOREIGN KEY (updated_by_user_id)
+        REFERENCES users(id) ON DELETE SET NULL;
 
 UPDATE penalties p
 INNER JOIN paymongo_checkouts c ON c.penalty_id = p.id

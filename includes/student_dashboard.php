@@ -10,7 +10,7 @@ if (!in_array($view, ['dashboard', 'penalties', 'tuition'], true)) {
 
 $userId = (int) $_SESSION['user']['id'];
 $statement = database()->prepare(
-    'SELECT p.id, p.title, u.student_id, p.amount, p.payment_method AS payment_type, p.status
+    'SELECT p.id, p.title, u.student_id, p.amount, p.payment_method AS payment_type, p.reference_number, p.status
      FROM penalties p
      INNER JOIN users u ON u.id = p.student_id
      WHERE p.student_id = :user_id
@@ -117,9 +117,7 @@ foreach ($penalties as $penalty) {
                 display: block;
                 width: 100%;
             }
-            .penalty-table {
-                table-layout: fixed;
-            }
+            .penalty-table { table-layout: fixed; }
             .penalty-table thead {
                 position: absolute;
                 width: 1px;
@@ -137,10 +135,11 @@ foreach ($penalties as $penalty) {
                 padding: 12px;
             }
             .penalty-table tbody tr {
-                padding: 10px 12px;
+                padding: 8px 10px;
                 border: 1px solid #e5eaf1;
                 border-radius: 6px;
                 background: #fff;
+                font-size: 12px;
             }
             .penalty-table tbody td {
                 display: grid;
@@ -171,6 +170,11 @@ foreach ($penalties as $penalty) {
                 justify-self: start;
                 white-space: normal;
             }
+            .penalty-table tbody tr:nth-child(even),
+            .penalty-table tbody tr:hover { background: #fff; }
+            .penalty-table tbody td { border-right: 0; }
+            .penalty-table .payment-status-message { text-align: left; }
+            .penalty-table .payment-status-actions { justify-content: flex-start; }
         }
         :root {
             font-family: Inter, "Segoe UI", Arial, sans-serif;
@@ -315,6 +319,68 @@ foreach ($penalties as $penalty) {
             border-radius: 14px;
             box-shadow: 0 4px 18px rgba(22, 34, 56, .04);
         }
+        .penalty-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(min(100%, 360px), 1fr));
+            gap: 12px;
+            padding: 16px;
+        }
+        .penalty-card {
+            min-width: 0;
+            padding: 15px;
+            border: 1px solid #e6eaf0;
+            border-radius: 10px;
+            background: #fff;
+        }
+        .penalty-card-header {
+            display: flex;
+            align-items: flex-start;
+            justify-content: space-between;
+            gap: 12px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid #eef1f5;
+        }
+        .penalty-card-title { display: flex; min-width: 0; align-items: flex-start; gap: 9px; }
+        .penalty-card-title h3 {
+            margin: 1px 0 0;
+            color: #1d2939;
+            font-size: 15px;
+            font-weight: 700;
+            overflow-wrap: anywhere;
+        }
+        .penalty-details {
+            display: grid;
+            grid-template-columns: repeat(2, minmax(0, 1fr));
+            gap: 12px;
+            padding: 13px 0;
+        }
+        .penalty-detail { min-width: 0; }
+        .penalty-detail-label {
+            display: block;
+            margin-bottom: 3px;
+            color: #667085;
+            font-size: 11px;
+            font-weight: 600;
+        }
+        .penalty-detail-value {
+            display: block;
+            color: #344054;
+            font-size: 13px;
+            font-weight: 600;
+            overflow-wrap: anywhere;
+        }
+        .penalty-detail-value.amount { color: #172033; font-size: 16px; }
+        .penalty-card-actions {
+            padding-top: 12px;
+            border-top: 1px solid #eef1f5;
+        }
+        .penalty-card-actions .payment-status-actions { justify-content: flex-start; }
+        .penalty-card-empty {
+            grid-column: 1 / -1;
+            padding: 22px 12px;
+            color: #667085;
+            text-align: center;
+        }
         #penalties {
             width: calc(100% + 16px);
             margin-left: -8px;
@@ -359,70 +425,84 @@ foreach ($penalties as $penalty) {
         .panel-header { padding: 22px 25px 18px; border-bottom: 1px solid #eef1f5; }
         .panel-header h2 { margin: 0; color: #1d2939; font-size: 18px; font-weight: 700; letter-spacing: -.2px; }
         .table-wrap { width: 100%; overflow-x: auto; }
-        .penalty-table { width: 100%; margin: 0; border-collapse: collapse; font-size: 14px; }
+        .penalty-table { width: 100%; min-width: 1060px; margin: 0; table-layout: fixed; border-collapse: collapse; font-size: 11px; line-height: 1.35; }
         .penalty-table th,
         .penalty-table td {
-            padding: 14px 16px;
-            border-bottom: 1px solid #eef1f5;
+            padding: 7px 8px;
+            border-right: 1px solid #e6eaf0;
+            border-bottom: 1px solid #e6eaf0;
             text-align: left;
             overflow-wrap: anywhere;
             vertical-align: middle;
         }
+        .penalty-table th:last-child,
+        .penalty-table td:last-child { border-right: 0; }
         .penalty-table th {
             color: #667085;
-            background: #f8fafc;
-            font-size: 11px;
+            background: #f1f5f9;
+            font-size: 9px;
             font-weight: 700;
             text-transform: uppercase;
-            letter-spacing: .55px;
+            letter-spacing: .35px;
             white-space: nowrap;
         }
         .penalty-table td { color: #344054; }
+        .penalty-table th:nth-child(1), .penalty-table td:nth-child(1) { width: 5%; }
+        .penalty-table th:nth-child(2), .penalty-table td:nth-child(2) { width: 14%; }
+        .penalty-table th:nth-child(3), .penalty-table td:nth-child(3) { width: 9%; }
+        .penalty-table th:nth-child(4), .penalty-table td:nth-child(4) { width: 9%; }
+        .penalty-table th:nth-child(5), .penalty-table td:nth-child(5) { width: 11%; }
+        .penalty-table th:nth-child(6), .penalty-table td:nth-child(6) { width: 11%; }
+        .penalty-table th:nth-child(7), .penalty-table td:nth-child(7) { width: 8%; }
+        .penalty-table th:nth-child(8), .penalty-table td:nth-child(8) { width: 33%; }
         .penalty-id {
             display: inline-flex;
-            min-width: 30px;
-            min-height: 24px;
+            min-width: 26px;
+            min-height: 21px;
             align-items: center;
             justify-content: center;
-            padding: 2px 7px;
+            padding: 2px 5px;
             border: 1px solid #e6eaf0;
-            border-radius: 6px;
+            border-radius: 5px;
             color: #667085;
             background: #f8fafc;
-            font-size: 12px;
+            font-size: 10px;
             line-height: 1;
         }
+        .penalty-table tbody tr:nth-child(even) { background: #f8fafc; }
+        .penalty-table tbody tr:hover { background: #eff6ff; }
         .penalty-table tbody tr:last-child td { border-bottom: 0; }
         .status-badge {
             display: inline-flex;
             align-items: center;
-            padding: 5px 9px;
+            padding: 3px 6px;
             border-radius: 999px;
             color: #b45309;
             background: #fef3c7;
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 650;
         }
         .status-badge.paid { color: #15803d; background: #dcfce7; }
+        .status-badge.pending { color: #1d4ed8; background: #dbeafe; }
         .payment-action {
             display: inline-flex;
-            min-height: 34px;
+            min-height: 28px;
             align-items: center;
             justify-content: center;
-            padding: 0 11px;
+            padding: 0 8px;
             border: 0;
             border-radius: 7px;
             color: #fff;
             background: #2563eb;
             text-decoration: none;
-            font-size: 12px;
+            font-size: 10px;
             font-weight: 650;
             white-space: nowrap;
         }
         .payment-action:hover { color: #fff; background: #1d4ed8; }
-        .payment-options { display: flex; flex-wrap: wrap; gap: 7px; }
-        .payment-status-message { display: block; margin: 0 0 9px; text-align: center; }
-        .payment-status-actions { display: flex; flex-wrap: wrap; justify-content: center; gap: 7px; }
+        .payment-options { display: flex; flex-wrap: wrap; gap: 5px; }
+        .payment-status-message { display: block; margin: 0 0 6px; text-align: left; }
+        .payment-status-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 5px; }
         .payment-status-actions .payment-action { white-space: normal; text-align: center; }
         .payment-status-message.paid { color: #15803d; font-weight: 700; }
         .payment-status-message.unpaid { color: #b45309; font-weight: 650; }
@@ -612,74 +692,75 @@ foreach ($penalties as $penalty) {
         <?php if ($view === 'penalties'): ?>
         <section class="panel" id="penalties" aria-labelledby="penalties-heading">
             <header class="panel-header"><h2 id="penalties-heading">My Penalties</h2></header>
-            <div class="table-wrap">
-                <table class="penalty-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Penalty</th>
-                            <th>Student ID</th>
-                            <th>Amount</th>
-                            <th>Payment Method</th>
-                            <th>Status</th>
-                            <th>Action</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <?php if (empty($penalties)): ?>
-                            <tr>
-                                <td colspan="7" class="empty-state">No penalties found.</td>
-                            </tr>
-                        <?php else: ?>
-                            <?php foreach ($penalties as $penalty): ?>
-                                <tr>
-                                    <td data-label="ID"><span class="penalty-id"><?= (int) $penalty['id'] ?></span></td>
-                                    <td data-label="Penalty"><?= htmlspecialchars($penalty['title'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td data-label="Student ID"><?= htmlspecialchars($penalty['student_id'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td data-label="Amount">₱<?= number_format((float) $penalty['amount'], 2) ?></td>
-                                    <?php
-                                        $paymentStatus = $penalty['status'] ?? 'unpaid';
-                                        $isPaid = $paymentStatus === 'paid';
-                                        $canChoosePaymentMethod = $paymentStatus === 'unpaid';
-                                    ?>
-                                    <td data-label="Payment Method">
-                                        <?= $canChoosePaymentMethod
-                                            ? 'Choose below'
-                                            : htmlspecialchars(ucfirst((string) ($penalty['payment_type'] ?? '')), ENT_QUOTES, 'UTF-8') ?>
-                                    </td>
-                                    <td data-label="Status"><span class="status-badge <?= $isPaid ? 'paid' : '' ?>"><?= htmlspecialchars(ucfirst((string) ($penalty['status'] ?? 'unpaid')), ENT_QUOTES, 'UTF-8') ?></span></td>
-                                    <td data-label="Choose Payment Method">
-                                        <?php if ($canChoosePaymentMethod): ?>
-                                            <div class="payment-status-message unpaid">Not paid yet — choose a payment method.</div>
-                                            <div class="payment-options payment-status-actions">
-                                                <a href="online_payment.php?id=<?= (int) $penalty['id'] ?>" class="payment-action">Pay with GCash QR</a>
-                                                <a href="payment_inperson.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">Request in-person payment</a>
-                                            </div>
-                                        <?php elseif (!$isPaid): ?>
-                                            <?php if (($penalty['payment_type'] ?? '') === 'online'): ?>
-                                                <span class="completed-label payment-status-message pending">GCash payment request sent — awaiting teacher verification. Not marked paid yet.</span>
-                                                <div class="payment-status-actions">
-                                                    <a href="online_payment.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">View GCash account and payment details</a>
-                                                    <a href="refund.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">Report wrong reference / request refund</a>
-                                                </div>
-                                            <?php else: ?>
-                                                <span class="completed-label payment-status-message pending">In-person payment request sent — awaiting teacher confirmation. Not marked paid yet.</span>
-                                            <?php endif; ?>
-                                        <?php else: ?>
-                                            <span class="completed-label payment-status-message paid">Payment confirmed — paid.</span>
-                                            <?php if (($penalty['payment_type'] ?? '') === 'online'): ?>
-                                                <div class="payment-status-actions">
-                                                    <a href="online_payment.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">View GCash account details</a>
-                                                    <a href="refund.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">Report wrong reference / request refund</a>
-                                                </div>
-                                            <?php endif; ?>
-                                        <?php endif; ?>
-                                    </td>
-                                </tr>
-                            <?php endforeach; ?>
-                        <?php endif; ?>
-                    </tbody>
-                </table>
+            <div class="penalty-list">
+                <?php if (empty($penalties)): ?>
+                    <p class="penalty-card-empty">No penalties found.</p>
+                <?php else: ?>
+                    <?php foreach ($penalties as $penalty): ?>
+                        <?php
+                            $paymentStatus = $penalty['status'] ?? 'unpaid';
+                            $isPaid = $paymentStatus === 'paid';
+                            $canChoosePaymentMethod = $paymentStatus === 'unpaid';
+                            $statusClass = $isPaid ? 'paid' : ($paymentStatus === 'pending' ? 'pending' : '');
+                        ?>
+                        <article class="penalty-card">
+                            <header class="penalty-card-header">
+                                <div class="penalty-card-title">
+                                    <span class="penalty-id">#<?= (int) $penalty['id'] ?></span>
+                                    <h3><?= htmlspecialchars($penalty['title'], ENT_QUOTES, 'UTF-8') ?></h3>
+                                </div>
+                                <span class="status-badge <?= $statusClass ?>"><?= htmlspecialchars(ucfirst((string) $paymentStatus), ENT_QUOTES, 'UTF-8') ?></span>
+                            </header>
+                            <div class="penalty-details">
+                                <div class="penalty-detail">
+                                    <span class="penalty-detail-label">Student ID</span>
+                                    <span class="penalty-detail-value"><?= htmlspecialchars($penalty['student_id'], ENT_QUOTES, 'UTF-8') ?></span>
+                                </div>
+                                <div class="penalty-detail">
+                                    <span class="penalty-detail-label">Amount</span>
+                                    <span class="penalty-detail-value amount">₱<?= number_format((float) $penalty['amount'], 2) ?></span>
+                                </div>
+                                <div class="penalty-detail">
+                                    <span class="penalty-detail-label">Payment Method</span>
+                                    <span class="penalty-detail-value"><?= $canChoosePaymentMethod
+                                        ? 'Choose below'
+                                        : htmlspecialchars(ucfirst((string) ($penalty['payment_type'] ?? '')), ENT_QUOTES, 'UTF-8') ?></span>
+                                </div>
+                                <div class="penalty-detail">
+                                    <span class="penalty-detail-label">Reference Number</span>
+                                    <span class="penalty-detail-value"><?= htmlspecialchars($penalty['reference_number'] ?: '—', ENT_QUOTES, 'UTF-8') ?></span>
+                                </div>
+                            </div>
+                            <div class="penalty-card-actions">
+                                <?php if ($canChoosePaymentMethod): ?>
+                                    <div class="payment-status-message unpaid">Not paid yet — choose a payment method.</div>
+                                    <div class="payment-options payment-status-actions">
+                                        <a href="online_payment.php?id=<?= (int) $penalty['id'] ?>" class="payment-action">Pay with GCash QR</a>
+                                        <a href="payment_inperson.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">Request in-person payment</a>
+                                    </div>
+                                <?php elseif (!$isPaid): ?>
+                                    <?php if (($penalty['payment_type'] ?? '') === 'online'): ?>
+                                        <span class="completed-label payment-status-message pending">GCash payment request sent — awaiting teacher verification. Not marked paid yet.</span>
+                                        <div class="payment-status-actions">
+                                            <a href="online_payment.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">View GCash account and payment details</a>
+                                            <a href="refund.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">Report wrong reference / request refund</a>
+                                        </div>
+                                    <?php else: ?>
+                                        <span class="completed-label payment-status-message pending">In-person payment request sent — awaiting teacher confirmation. Not marked paid yet.</span>
+                                    <?php endif; ?>
+                                <?php else: ?>
+                                    <span class="completed-label payment-status-message paid">Payment confirmed — paid.</span>
+                                    <?php if (($penalty['payment_type'] ?? '') === 'online'): ?>
+                                        <div class="payment-status-actions">
+                                            <a href="online_payment.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">View GCash account details</a>
+                                            <a href="refund.php?id=<?= (int) $penalty['id'] ?>" class="payment-action secondary">Report wrong reference / request refund</a>
+                                        </div>
+                                    <?php endif; ?>
+                                <?php endif; ?>
+                            </div>
+                        </article>
+                    <?php endforeach; ?>
+                <?php endif; ?>
             </div>
         </section>
         <?php elseif ($view === 'tuition'): ?>

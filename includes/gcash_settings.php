@@ -169,7 +169,7 @@ unset($_SESSION['gcash_settings_flash']);
 				</label>
 				<div class="actions">
 					<button class="button" type="submit">Save GCash Business QR</button>
-					<a class="button secondary" href="teachers_dashboard.php#penalties">Back to Teacher Dashboard</a>
+					<a class="button secondary" href="teachers_dashboard.php" target="_top">Back to Teacher Dashboard</a>
 				</div>
 			</form>
 

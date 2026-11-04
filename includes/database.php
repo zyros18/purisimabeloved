@@ -29,7 +29,11 @@ function database(): PDO
 function student_course_catalog(): array
 {
     return [
-        'CET' => ['IT', 'CE', 'EE'],
+        'CET' => [
+            'Bachelor of Science in Information Technology',
+            'Bachelor of Science in Civil Engineering',
+            'Bachelor of Science in Electrical Engineering',
+        ],
         'CTHM' => [
             'Bachelor of Science in Hospitality Management (BSHM)',
             'Bachelor of Science in Tourism Management (BSTM)',
@@ -61,6 +65,37 @@ function student_course_catalog(): array
         'JHS' => ['Junior High School Program'],
         'ELEMENTARY' => ['Elementary Program'],
     ];
+}
+
+function student_course_display_name(string $course): string
+{
+    $course = trim($course);
+    $knownCourses = [
+        'Bachelor of Science in Information Technology' => ['IT', 'BSIT'],
+        'Bachelor of Science in Civil Engineering' => ['CE', 'BSCE'],
+        'Bachelor of Science in Electrical Engineering' => ['EE', 'BSEE'],
+    ];
+
+    foreach ($knownCourses as $courseName => $aliases) {
+        if (strcasecmp($course, $courseName) === 0 ||
+            in_array(strtoupper($course), $aliases, true)) {
+            return $courseName;
+        }
+    }
+
+    return $course;
+}
+
+function student_course_aliases(string $course): array
+{
+    $courseName = student_course_display_name($course);
+    $knownAliases = [
+        'Bachelor of Science in Information Technology' => ['IT', 'BSIT'],
+        'Bachelor of Science in Civil Engineering' => ['CE', 'BSCE'],
+        'Bachelor of Science in Electrical Engineering' => ['EE', 'BSEE'],
+    ];
+
+    return $knownAliases[$courseName] ?? [$courseName, $courseName];
 }
 
 function student_year_levels(string $department): array

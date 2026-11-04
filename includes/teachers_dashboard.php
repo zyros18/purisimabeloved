@@ -4,7 +4,7 @@ require_role('teacher');
 ensure_tuition_balances_table();
 
 $view = is_string($_GET['view'] ?? null) ? $_GET['view'] : 'dashboard';
-if (!in_array($view, ['dashboard', 'students', 'penalties'], true)) {
+if (!in_array($view, ['dashboard', 'students', 'penalties', 'gcash'], true)) {
     $view = 'dashboard';
 }
 
@@ -26,40 +26,58 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $department = is_string($departmentInput) ? $departmentInput : '';
             $yearLevelInput = $_POST['year_level'] ?? '';
             $yearLevel = is_string($yearLevelInput) ? $yearLevelInput : '';
+            $courseInput = $_POST['course'] ?? '';
+            $course = is_string($courseInput) ? trim($courseInput) : '';
             $submittedToken = $_POST['csrf_token'] ?? '';
 
             if (!$studentUserId || !is_string($submittedToken) ||
                 !hash_equals($csrfToken, $submittedToken) ||
                 $department === '' || strlen($department) > 30 ||
-                !in_array($yearLevel, ['1st', '2nd', '3rd', '4th'], true) ||
+                !in_array($yearLevel, student_year_levels($department), true) ||
+                $course === '' || strlen($course) > 150 ||
                 $title === '' || $amount === false || $amount <= 0) {
-                throw new RuntimeException('Select a department, a year level from 1st to 4th, and a student from those choices.');
+                throw new RuntimeException('Select a department, year level, course, and student from those choices.');
             }
 
-            $yearCondition = 'year_level = :year_level';
             if ($department === 'CET') {
+                $courseAliases = student_course_aliases($course);
                 $studentCheck = database()->prepare(
                     "SELECT id FROM users
                      WHERE id = :id AND role = 'student'
-                       AND (department = 'CET' OR department IN ('IT', 'CE', 'EE')
-                            OR course IN ('IT', 'CE', 'EE'))
-                       AND {$yearCondition}"
+                       AND year_level = :year_level
+                       AND ((department = 'CET'
+                             AND (course = :course OR course = :course_alias_one OR course = :course_alias_two))
+                            OR (department = :legacy_department
+                                AND (course IS NULL OR course = '' OR course = :legacy_course
+                                     OR course = :legacy_course_alias_one OR course = :legacy_course_alias_two)))"
                 );
+                $studentCheckParameters = [
+                    'id' => $studentUserId,
+                    'year_level' => $yearLevel,
+                    'course' => $course,
+                    'course_alias_one' => $courseAliases[0],
+                    'course_alias_two' => $courseAliases[1],
+                    'legacy_department' => $courseAliases[0],
+                    'legacy_course' => $course,
+                    'legacy_course_alias_one' => $courseAliases[0],
+                    'legacy_course_alias_two' => $courseAliases[1],
+                ];
             } else {
                 $studentCheck = database()->prepare(
                     "SELECT id FROM users
                      WHERE id = :id AND role = 'student' AND department = :department
-                       AND {$yearCondition}"
+                       AND year_level = :year_level AND course = :course"
                 );
+                $studentCheckParameters = [
+                    'id' => $studentUserId,
+                    'department' => $department,
+                    'year_level' => $yearLevel,
+                    'course' => $course,
+                ];
             }
-            $studentCheckParameters = ['id' => $studentUserId];
-            if ($department !== 'CET') {
-                $studentCheckParameters['department'] = $department;
-            }
-            $studentCheckParameters['year_level'] = $yearLevel;
             $studentCheck->execute($studentCheckParameters);
             if (!$studentCheck->fetchColumn()) {
-                throw new RuntimeException('The selected account is not a student. Please select a student again.');
+                throw new RuntimeException('The selected account does not match the department, year level, and course. Please select a student again.');
             }
 
             $insert = database()->prepare(
@@ -273,17 +291,40 @@ $studentStatement = database()->query(
 );
 $students = $studentStatement->fetchAll();
 $departments = ['CET', 'CTHM', 'CASE', 'CRIM', 'SSG', 'CME', 'COL', 'CMA', 'SHS', 'JHS', 'ELEMENTARY'];
+$courseOptionsByDepartment = student_course_catalog();
+$normalizePenaltyCourse = static function (string $course, string $department): string {
+    return $department === 'CET' ? student_course_display_name($course) : $course;
+};
 foreach ($students as $student) {
     $studentDepartment = $student['department'] ?? '';
     if ($studentDepartment !== '' && !in_array($studentDepartment, ['IT', 'CE', 'EE'], true) &&
         !in_array($studentDepartment, $departments, true)) {
         $departments[] = $studentDepartment;
     }
+
+    $courseDepartment = in_array($studentDepartment, ['IT', 'CE', 'EE'], true)
+        ? 'CET'
+        : $studentDepartment;
+    $studentCourse = $normalizePenaltyCourse((string) ($student['course'] ?? ''), $courseDepartment);
+    if ($studentCourse === '' && in_array($studentDepartment, ['IT', 'CE', 'EE'], true)) {
+        $studentCourse = $normalizePenaltyCourse($studentDepartment, 'CET');
+    }
+    if ($courseDepartment !== '' && $courseDepartment !== 'CET' && $studentCourse !== '') {
+        $courseOptionsByDepartment[$courseDepartment] ??= [];
+        if (!in_array($studentCourse, $courseOptionsByDepartment[$courseDepartment], true)) {
+            $courseOptionsByDepartment[$courseDepartment][] = $studentCourse;
+        }
+    }
+}
+$yearOptionsByDepartment = [];
+foreach ($departments as $departmentOption) {
+    $yearOptionsByDepartment[$departmentOption] = student_year_levels($departmentOption);
 }
 $statement = database()->query(
     'SELECT p.id, p.title, p.amount, p.status, p.payment_method, p.reference_number, u.full_name
      FROM penalties p
      INNER JOIN users u ON u.id = p.student_id
+     WHERE u.role = \'student\'
      ORDER BY p.created_at DESC'
 );
 $penalties = $statement->fetchAll();
@@ -326,7 +367,7 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
         .avatar { width: 38px; height: 38px; display: grid; flex: 0 0 38px; place-items: center; border-radius: 50%; color: #1e40af; background: #dbeafe; font-weight: 700; object-fit: cover; }
         .profile-name { overflow: hidden; margin: 0; color: #344054; font-size: 13px; font-weight: 650; text-overflow: ellipsis; white-space: nowrap; }
         .mobile-header { display: none; }
-        .content { width: min(100% - 264px, 1440px); min-width: 0; margin-left: 264px; padding: 42px clamp(24px, 4vw, 64px) 56px; }
+        .content { width: calc(100% - 264px); min-width: 0; margin-left: 264px; padding: 42px clamp(24px, 3vw, 48px) 56px; }
         .page-header { margin-bottom: 28px; }
         h1 { margin: 0; color: #152238; font-size: clamp(27px, 3vw, 34px); font-weight: 750; letter-spacing: -.7px; }
         .panel { padding: 25px; margin-bottom: 24px; background: #fff; border: 1px solid #e7ecf2; border-radius: 14px; box-shadow: 0 4px 18px rgba(22, 34, 56, .04); }
@@ -338,6 +379,8 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
         .summary-value { margin: 0; color: #172033; font-size: 27px; font-weight: 750; line-height: 1; }
         .summary-card.paid .summary-value { color: #16804a; }
         .summary-card.unpaid .summary-value { color: #d97706; }
+        .gcash-frame-panel { padding: 0; overflow: hidden; }
+        .gcash-settings-frame { display: block; width: 100%; min-height: 900px; border: 0; background: #f1f5f9; }
         .message { display: flex; align-items: center; gap: 10px; padding: 13px 15px; margin: 0 0 18px; border: 1px solid #fecaca; border-radius: 9px; color: #991b1b; background: #fef2f2; font-size: 14px; }
         .message.success { border-color: #bbf7d0; color: #166534; background: #f0fdf4; }
         .form-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 19px 20px; }
@@ -355,6 +398,74 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
         th { color: #667085; background: #f8fafc; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .55px; white-space: nowrap; }
         td { color: #344054; }
         tbody tr:last-child td { border-bottom: 0; }
+        .spreadsheet-wrap { width: 100%; max-width: 100%; border: 1px solid #dfe5ec; border-radius: 7px; scrollbar-color: #98a2b3 #f1f5f9; }
+        .spreadsheet-table { width: max-content; min-width: 100%; border-collapse: separate; border-spacing: 0; font-size: 11px; line-height: 1.3; }
+        #students { padding: 16px; }
+        #students h2 { margin-bottom: 12px; }
+        .students-table { width: 100%; min-width: 0; table-layout: fixed; font-size: 11px; background: #fff; }
+        .students-table th:nth-child(1) { width: 23%; }
+        .students-table th:nth-child(2) { width: 19%; }
+        .students-table th:nth-child(3) { width: 21%; }
+        .students-table th:nth-child(4) { width: 15%; }
+        .students-table th:nth-child(5) { width: 22%; }
+        .spreadsheet-table.students-table th, .spreadsheet-table.students-table td { padding: 6px 7px; border: 1px solid #e6e6e6; text-align: left; vertical-align: middle; line-height: 1.3; white-space: normal; overflow-wrap: anywhere; }
+        .spreadsheet-table.students-table th:last-child, .spreadsheet-table.students-table td:last-child { border-right: 1px solid #e6e6e6; }
+        .spreadsheet-table.students-table th { background: #f5f5f5; }
+        .spreadsheet-table.students-table td { white-space: normal; overflow-wrap: anywhere; }
+        .spreadsheet-table.students-table tbody tr, .spreadsheet-table.students-table tbody tr:nth-child(even) { background: #fff; }
+        .spreadsheet-table.students-table tbody tr:hover { background: #f8fafc; }
+        .students-table .tuition-form { min-width: 0; gap: 4px; }
+        .students-table .tuition-form label { gap: 4px; font-size: 10px; }
+        .students-table .tuition-form input { height: 30px; padding: 0 6px; font-size: 11px; }
+        .students-table .review-button { white-space: normal; text-align: center; }
+        .student-primary { display: block; color: #1d2939; font-weight: 650; }
+        .student-secondary { display: block; margin-top: 3px; color: #667085; font-size: 10px; }
+        .student-balance { display: block; font-weight: 650; }
+        .student-tuition-actions p { margin: 0 0 4px; }
+        .student-tuition-actions .review-actions { gap: 4px; }
+        .student-tuition-actions .review-button { min-height: 27px; padding: 0 7px; font-size: 10px; }
+        .spreadsheet-table.penalty-records-table { width: 100%; min-width: 0; table-layout: fixed; }
+        .spreadsheet-table.penalty-records-table th,
+        .spreadsheet-table.penalty-records-table td { white-space: normal; overflow-wrap: anywhere; vertical-align: top; }
+        .spreadsheet-table.penalty-records-table th:nth-child(1) { width: 43%; }
+        .spreadsheet-table.penalty-records-table th:nth-child(2) { width: 17%; }
+        .spreadsheet-table.penalty-records-table th:nth-child(3) { width: 15%; }
+        .spreadsheet-table.penalty-records-table th:nth-child(4) { width: 25%; }
+        .penalty-record-student { display: block; color: #1d2939; font-weight: 650; }
+        .penalty-record-title { display: block; margin-top: 3px; color: #667085; font-size: 10px; }
+        .penalty-record-details summary {
+            width: fit-content;
+            padding: 5px 8px;
+            border: 1px solid #bfdbfe;
+            border-radius: 6px;
+            color: #1d4ed8;
+            background: #eff6ff;
+            font-size: 10px;
+            font-weight: 650;
+            cursor: pointer;
+            list-style-position: inside;
+        }
+        .penalty-record-details summary:hover { background: #dbeafe; }
+        .penalty-record-details[open] .show-details { display: none; }
+        .penalty-record-details .hide-details { display: none; }
+        .penalty-record-details[open] .hide-details { display: inline; }
+        .penalty-record-detail-content { padding-top: 8px; }
+        .penalty-record-detail-content p { margin: 0 0 6px; }
+        .penalty-record-detail-content strong { color: #667085; font-size: 9px; text-transform: uppercase; }
+        .penalty-record-detail-content .review-actions { margin: 7px 0; }
+        .penalty-record-detail-content .delete-form { margin-top: 7px; }
+        .spreadsheet-table th, .spreadsheet-table td { padding: 6px 8px; border-right: 1px solid #e6eaf0; border-bottom: 1px solid #e6eaf0; overflow-wrap: normal; white-space: nowrap; }
+        .spreadsheet-table th { position: sticky; top: 0; z-index: 1; background: #f1f5f9; font-size: 9px; letter-spacing: .35px; }
+        .spreadsheet-table th:last-child, .spreadsheet-table td:last-child { border-right: 0; }
+        .spreadsheet-table tbody tr:nth-child(even) { background: #f8fafc; }
+        .spreadsheet-table tbody tr:hover { background: #eff6ff; }
+        .spreadsheet-table .empty-state { padding: 12px; }
+        .spreadsheet-table .tuition-form { min-width: 112px; gap: 4px; }
+        .spreadsheet-table .tuition-form input { height: 28px; font-size: 11px; }
+        .spreadsheet-table .tuition-form button, .spreadsheet-table .review-button, .spreadsheet-table .delete-button { min-height: 26px; padding: 0 7px; font-size: 10px; white-space: nowrap; }
+        .spreadsheet-table .review-actions { gap: 4px; }
+        .spreadsheet-table td p { margin: 0 0 3px; }
+        .spreadsheet-table .status-badge { padding: 3px 6px; font-size: 10px; }
         .delete-form, .review-form { margin: 0; }
         .review-actions { display: flex; flex-wrap: wrap; gap: 6px; }
         .tuition-form { display: grid; min-width: 150px; gap: 6px; }
@@ -374,7 +485,7 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
         .empty-state { padding: 24px 12px; color: #667085; text-align: center; }
         .sidebar-backdrop { display: none; }
         @media (max-width: 1050px) {
-            .content { padding-right: 28px; padding-left: 28px; }
+            .content { padding-right: 24px; padding-left: 24px; }
             .summary-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
         }
         @media (max-width: 760px) {
@@ -399,6 +510,7 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
             .summary-value { font-size: 24px; }
             .panel { padding: 19px 15px; margin-bottom: 17px; border-radius: 12px; }
             #penalties { padding: 21px 17px; }
+            .gcash-frame-panel { padding: 0; }
             .panel h2 { margin-bottom: 18px; }
             .form-grid { grid-template-columns: 1fr; gap: 16px; }
             .form-actions button { width: 100%; }
@@ -410,6 +522,14 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
             tbody td:last-child { border-bottom: 0; }
             tbody td::before { content: attr(data-label); color: #667085; font-size: 11px; font-weight: 700; text-transform: uppercase; }
             .empty-state { display: block; }
+            .spreadsheet-table { display: table; width: max-content; }
+            .students-table { width: 100%; min-width: 0; table-layout: fixed; }
+            .spreadsheet-table thead { position: static; width: auto; height: auto; padding: 0; margin: 0; overflow: visible; clip: auto; white-space: normal; border: 0; }
+            .spreadsheet-table tbody { display: table-row-group; }
+            .spreadsheet-table tr { display: table-row; width: auto; padding: 0; border: 0; border-radius: 0; background: transparent; }
+            .spreadsheet-table tbody td { display: table-cell; width: auto; padding: 6px 8px; border-bottom: 1px solid #e6eaf0; white-space: normal; }
+            .spreadsheet-table tbody td::before { content: none; }
+            .spreadsheet-table .empty-state { display: table-cell; }
         }
         @media (prefers-reduced-motion: reduce) {
             *, *::before, *::after { scroll-behavior: auto !important; transition-duration: .01ms !important; }
@@ -445,11 +565,7 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l4 4v14H3V3h4Z"/><path d="M7 3v5h10V3M7 13h10M7 17h7"/></svg>
                 <span>Penalty Records</span>
             </a>
-            <a href="settings.php">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.4.8l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.4-.8l-1.7.6-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.7l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.4-.8l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.4.8l1.7-.6 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.7Z"/></svg>
-                <span>Settings &amp; Profile</span>
-            </a>
-            <a href="gcash_settings.php">
+            <a href="teachers_dashboard.php?view=gcash" <?= $view === 'gcash' ? 'class="active" aria-current="page"' : '' ?>>
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M3 9h18M7 15h4"/></svg>
                 <span>GCash Business QR</span>
             </a>
@@ -469,6 +585,10 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
                 <p class="profile-name"><?= htmlspecialchars((string) ($teacher['full_name'] ?? 'Teacher'), ENT_QUOTES, 'UTF-8') ?></p>
             </div>
             <nav aria-label="Account navigation">
+                <a href="settings.php">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.4.8l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.4-.8l-1.7.6-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.7l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.4-.8l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.4.8l1.7-.6 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.7Z"/></svg>
+                    <span>Settings &amp; Profile</span>
+                </a>
                 <a href="logout.php" class="logout">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg>
                     <span>Logout</span>
@@ -477,7 +597,7 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
         </div>
     </aside>
     <main class="content">
-        <header class="page-header"><h1>Teacher Dashboard</h1></header>
+        <header class="page-header"><h1><?= $view === 'gcash' ? 'GCash Business QR' : 'Teacher Dashboard' ?></h1></header>
         <?php if ($dashboardError): ?><p class="message" role="alert"><?= htmlspecialchars($dashboardError, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
         <?php if ($dashboardSuccess): ?><p class="message success" role="status"><?= htmlspecialchars($dashboardSuccess, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
         <?php if ($view === 'dashboard'): ?>
@@ -488,7 +608,12 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
             <article class="summary-card unpaid"><p class="summary-label">Unpaid Penalties</p><p class="summary-value"><?= (int) $summary['unpaid_penalties'] ?></p></article>
         </section>
         <?php endif; ?>
-        <?php if (in_array($view, ['dashboard', 'penalties'], true)): ?>
+        <?php if ($view === 'gcash'): ?>
+        <section class="panel gcash-frame-panel" aria-label="GCash Business QR settings">
+            <iframe class="gcash-settings-frame" src="gcash_settings.php" title="GCash Business QR settings"></iframe>
+        </section>
+        <?php endif; ?>
+        <?php if ($view === 'dashboard'): ?>
         <section class="panel" aria-labelledby="add-penalty-title">
             <h2 id="add-penalty-title">Add Student Penalty</h2>
             <form id="penaltyForm" method="post">
@@ -506,33 +631,45 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
                     <label for="penaltyYearLevel">Year level
                         <select id="penaltyYearLevel" name="year_level" required disabled>
                             <option value="">Choose a department first</option>
-                            <option value="1st">1st</option>
-                            <option value="2nd">2nd</option>
-                            <option value="3rd">3rd</option>
-                            <option value="4th">4th</option>
+                        </select>
+                    </label>
+                    <label for="penaltyCourse">Course
+                        <select id="penaltyCourse" name="course" required disabled>
+                            <option value="">Choose a department and year level first</option>
+                            <?php foreach ($courseOptionsByDepartment as $courseDepartment => $courseOptions): ?>
+                                <?php foreach ($courseOptions as $courseOption): ?>
+                                    <option value="<?= htmlspecialchars($courseOption, ENT_QUOTES, 'UTF-8') ?>" data-department="<?= htmlspecialchars($courseDepartment, ENT_QUOTES, 'UTF-8') ?>" data-course-key="<?= htmlspecialchars(student_course_aliases($courseOption)[0], ENT_QUOTES, 'UTF-8') ?>" hidden><?= htmlspecialchars($courseOption, ENT_QUOTES, 'UTF-8') ?></option>
+                                <?php endforeach; ?>
+                            <?php endforeach; ?>
                         </select>
                     </label>
                     <label for="penaltyStudentUserId">Student
                         <select id="penaltyStudentUserId" name="student_user_id" required disabled>
-                            <option value="">Choose a student</option>
+                            <option value="">Choose a department, year level, and course first</option>
                             <?php foreach ($students as $student): ?>
                                 <?php
                                 $studentDepartment = (string) ($student['department'] ?? '');
                                 $studentCourse = (string) ($student['course'] ?? '');
+                                $courseDepartment = in_array($studentDepartment, ['IT', 'CE', 'EE'], true)
+                                    ? 'CET'
+                                    : $studentDepartment;
+                                $penaltyStudentCourse = $normalizePenaltyCourse($studentCourse, $courseDepartment);
+                                if ($penaltyStudentCourse === '' && in_array($studentDepartment, ['IT', 'CE', 'EE'], true)) {
+                                    $penaltyStudentCourse = $normalizePenaltyCourse($studentDepartment, 'CET');
+                                }
                                 $isCetStudent = $studentDepartment === 'CET' ||
                                     in_array($studentDepartment, ['IT', 'CE', 'EE'], true) ||
                                     in_array($studentCourse, ['IT', 'CE', 'EE'], true);
                                 $studentYear = (string) ($student['year_level'] ?? '');
                                 $studentOptionLabel = $student['full_name'] . ' (' .
                                     ($student['student_id'] ?? 'No student ID') . ')';
-                                if ($studentCourse !== '') {
-                                    $studentOptionLabel .= ' - ' . $studentCourse;
-                                }
+                                $studentOptionLabel .= ' - ' .
+                                    ($penaltyStudentCourse !== '' ? $penaltyStudentCourse : 'Course not set');
                                 if ($studentYear !== '') {
                                     $studentOptionLabel .= ' - ' . $studentYear;
                                 }
                                 ?>
-                                <option value="<?= (int) $student['id'] ?>" data-department="<?= htmlspecialchars($studentDepartment, ENT_QUOTES, 'UTF-8') ?>" data-course="<?= htmlspecialchars($studentCourse, ENT_QUOTES, 'UTF-8') ?>" data-cet-student="<?= $isCetStudent ? '1' : '0' ?>" data-year-level="<?= htmlspecialchars($studentYear, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($studentOptionLabel, ENT_QUOTES, 'UTF-8') ?></option>
+                                <option value="<?= (int) $student['id'] ?>" data-department="<?= htmlspecialchars($studentDepartment, ENT_QUOTES, 'UTF-8') ?>" data-course="<?= htmlspecialchars($penaltyStudentCourse, ENT_QUOTES, 'UTF-8') ?>" data-course-key="<?= htmlspecialchars(student_course_aliases($penaltyStudentCourse)[0], ENT_QUOTES, 'UTF-8') ?>" data-cet-student="<?= $isCetStudent ? '1' : '0' ?>" data-year-level="<?= htmlspecialchars($studentYear, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($studentOptionLabel, ENT_QUOTES, 'UTF-8') ?></option>
                             <?php endforeach; ?>
                         </select>
                     </label>
@@ -543,32 +680,48 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
             </form>
         </section>
         <?php endif; ?>
-        <?php if (in_array($view, ['dashboard', 'students'], true)): ?>
+        <?php if ($view === 'students'): ?>
         <section class="panel" id="students" aria-labelledby="students-title">
             <h2 id="students-title">Students</h2>
-            <div class="table-wrap"><table><thead><tr><th>Student ID</th><th>Name</th><th>Username</th><th>Cellphone</th><th>Course</th><th>Department</th><th>Year level</th><th>Tuition Balance</th><th>Action</th></tr></thead><tbody>
+            <div class="table-wrap spreadsheet-wrap"><table class="spreadsheet-table students-table"><thead><tr><th>Student</th><th>Contact</th><th>Program</th><th>Tuition</th><th>Actions</th></tr></thead><tbody>
             <?php if (empty($students)): ?>
-                <tr><td class="empty-state" colspan="9">No student accounts found.</td></tr>
+                <tr><td class="empty-state" colspan="5">No student accounts found.</td></tr>
             <?php else: ?>
                 <?php foreach ($students as $student): ?>
                     <tr>
-                        <td data-label="Student ID"><?= htmlspecialchars($student['student_id'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Name"><?= htmlspecialchars($student['full_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Username"><?= htmlspecialchars($student['username'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Cellphone"><?= htmlspecialchars($student['cellphone'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Course"><?= htmlspecialchars($student['course'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Department"><?= htmlspecialchars($student['department'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Year level"><?= htmlspecialchars($student['year_level'] ?? '', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Tuition Balance">
+                        <td data-label="Student">
+                            <span class="student-primary"><?= htmlspecialchars($student['full_name'], ENT_QUOTES, 'UTF-8') ?></span>
+                            <span class="student-secondary">ID: <?= htmlspecialchars($student['student_id'] ?? '—', ENT_QUOTES, 'UTF-8') ?></span>
+                        </td>
+                        <td data-label="Contact">
+                            <span class="student-primary"><?= htmlspecialchars($student['username'], ENT_QUOTES, 'UTF-8') ?></span>
+                            <span class="student-secondary"><?= htmlspecialchars($student['cellphone'] ?: 'No cellphone', ENT_QUOTES, 'UTF-8') ?></span>
+                        </td>
+                        <td data-label="Program">
+                            <?php
+                            $studentDisplayCourse = student_course_display_name((string) ($student['course'] ?? ''));
+                            if ($studentDisplayCourse === '' && in_array($student['department'], ['IT', 'CE', 'EE'], true)) {
+                                $studentDisplayCourse = student_course_display_name((string) $student['department']);
+                            }
+                            ?>
+                            <span class="student-primary"><?= htmlspecialchars($studentDisplayCourse ?: 'Course not set', ENT_QUOTES, 'UTF-8') ?></span>
+                            <span class="student-secondary">
+                                <?= htmlspecialchars($student['department'] ?: 'Department not set', ENT_QUOTES, 'UTF-8') ?>
+                                <?= !empty($student['year_level']) ? ' · ' . htmlspecialchars($student['year_level'], ENT_QUOTES, 'UTF-8') : '' ?>
+                            </span>
+                        </td>
+                        <td data-label="Tuition">
                             <?php if ($student['tuition_status'] === 'paid'): ?>
-                                ₱0.00 (Paid; last payment ₱<?= number_format((float) $student['paid_amount'], 2) ?>)
+                                <span class="student-balance">₱0.00 · Paid</span>
+                                <span class="student-secondary">Last payment ₱<?= number_format((float) $student['paid_amount'], 2) ?></span>
                             <?php elseif ($student['tuition_amount'] !== null): ?>
-                                ₱<?= number_format((float) $student['tuition_amount'], 2) ?> (<?= htmlspecialchars(ucfirst((string) $student['tuition_status']), ENT_QUOTES, 'UTF-8') ?>)
+                                <span class="student-balance">₱<?= number_format((float) $student['tuition_amount'], 2) ?></span>
+                                <span class="student-secondary"><?= htmlspecialchars(ucfirst((string) $student['tuition_status']), ENT_QUOTES, 'UTF-8') ?></span>
                             <?php else: ?>
-                                Not set
+                                <span class="student-secondary">Not set</span>
                             <?php endif; ?>
                         </td>
-                        <td data-label="Tuition actions">
+                        <td data-label="Actions" class="student-tuition-actions">
                             <?php if ($student['tuition_status'] === 'pending'): ?>
                                 <p>Payment amount: ₱<?= number_format((float) $student['pending_payment_amount'], 2) ?></p>
                                 <p>Balance before payment: ₱<?= number_format((float) $student['tuition_amount'], 2) ?></p>
@@ -608,24 +761,29 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
             </tbody></table></div>
         </section>
         <?php endif; ?>
-        <?php if (in_array($view, ['dashboard', 'penalties'], true)): ?>
+        <?php if ($view === 'penalties'): ?>
         <section class="panel" id="penalties" aria-labelledby="records-title">
             <h2 id="records-title">Penalty Records</h2>
-            <div class="table-wrap"><table><thead><tr><th>Student</th><th>Penalty</th><th>Amount</th><th>Payment Method</th><th>Reference Number</th><th>Status</th><th>Action</th></tr></thead><tbody>
+            <div class="table-wrap spreadsheet-wrap"><table class="spreadsheet-table penalty-records-table"><thead><tr><th>Student / Penalty</th><th>Amount</th><th>Status</th><th>Details</th></tr></thead><tbody>
             <?php if (empty($penalties)): ?>
-                <tr><td class="empty-state" colspan="7">No penalty records found.</td></tr>
+                <tr><td class="empty-state" colspan="4">No penalty records found.</td></tr>
             <?php else: ?>
                 <?php foreach ($penalties as $penalty): ?>
                     <?php $statusClass = strtolower((string) $penalty['status']); ?>
                     <?php $isPaymentRequest = $penalty['status'] === 'pending' && in_array($penalty['payment_method'], ['online', 'in-person'], true); ?>
                     <tr>
-                        <td data-label="Student"><?= htmlspecialchars($penalty['full_name'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Penalty"><?= htmlspecialchars($penalty['title'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Amount"><?= htmlspecialchars($penalty['amount'], ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Payment Method"><?= htmlspecialchars($penalty['payment_method'] ? ucfirst($penalty['payment_method']) : 'Not selected', ENT_QUOTES, 'UTF-8') ?></td>
-                        <td data-label="Reference Number"><?= htmlspecialchars($penalty['reference_number'] ?: '—', ENT_QUOTES, 'UTF-8') ?></td>
+                        <td data-label="Student / Penalty">
+                            <span class="penalty-record-student"><?= htmlspecialchars($penalty['full_name'], ENT_QUOTES, 'UTF-8') ?></span>
+                            <span class="penalty-record-title"><?= htmlspecialchars($penalty['title'], ENT_QUOTES, 'UTF-8') ?></span>
+                        </td>
+                        <td data-label="Amount">₱<?= number_format((float) $penalty['amount'], 2) ?></td>
                         <td data-label="Status"><span class="status-badge <?= htmlspecialchars($statusClass, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars(ucfirst((string) $penalty['status']), ENT_QUOTES, 'UTF-8') ?></span></td>
-                        <td data-label="Action">
+                        <td data-label="Details">
+                            <details class="penalty-record-details">
+                                <summary><span class="show-details">View Details</span><span class="hide-details">Hide Details</span></summary>
+                                <div class="penalty-record-detail-content">
+                                    <p><strong>Payment method</strong><br><?= htmlspecialchars($penalty['payment_method'] ? ucfirst($penalty['payment_method']) : 'Not selected', ENT_QUOTES, 'UTF-8') ?></p>
+                                    <p><strong>Reference number</strong><br><?= htmlspecialchars($penalty['reference_number'] ?: '—', ENT_QUOTES, 'UTF-8') ?></p>
                             <?php if ($isPaymentRequest): ?>
                                 <div class="review-actions">
                                     <form class="review-form" method="post" onsubmit="return confirm('Confirm that you verified this payment was received?')">
@@ -651,6 +809,8 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
                                 <input type="hidden" name="penalty_id" value="<?= (int) $penalty['id'] ?>">
                                 <button class="delete-button" type="submit">Delete</button>
                             </form>
+                                </div>
+                            </details>
                         </td>
                     </tr>
                 <?php endforeach; ?>
@@ -665,47 +825,82 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
     const sidebarBackdrop = document.getElementById('sidebarBackdrop');
     const penaltyDepartment = document.getElementById('penaltyDepartment');
     const penaltyYearLevel = document.getElementById('penaltyYearLevel');
+    const penaltyCourse = document.getElementById('penaltyCourse');
     const penaltyStudent = document.getElementById('penaltyStudentUserId');
 
-    if (penaltyDepartment && penaltyYearLevel && penaltyStudent) {
+    if (penaltyDepartment && penaltyYearLevel && penaltyCourse && penaltyStudent) {
+        const yearOptionsByDepartment = <?= json_encode($yearOptionsByDepartment, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        const allStudentOptions = Array.from(penaltyStudent.options).slice(1);
+
         function studentMatchesDepartment(option, department) {
             return department === 'CET'
                 ? option.dataset.cetStudent === '1'
                 : option.dataset.department === department;
         }
 
-        function updatePenaltyStudentOptions() {
+        function studentMatchesCourse(option, courseOption) {
+            return option.dataset.courseKey === courseOption.dataset.courseKey;
+        }
+
+        function updatePenaltyCourseOptions() {
             const department = penaltyDepartment.value;
             const yearLevel = penaltyYearLevel.value;
-            let matchingStudents = 0;
-            penaltyStudent.value = '';
-            penaltyStudent.disabled = department === '' || yearLevel === '';
+            let matchingCourses = 0;
+            penaltyCourse.value = '';
+            penaltyCourse.disabled = department === '' || yearLevel === '';
+            penaltyCourse.options[0].textContent = department === ''
+                ? 'Choose a department first'
+                : (yearLevel === '' ? 'Choose a year level first' : 'Choose a course');
 
-            Array.from(penaltyStudent.options).forEach(function (option, index) {
+            Array.from(penaltyCourse.options).forEach(function (option, index) {
                 if (index === 0) {
                     option.hidden = false;
-                    option.textContent = department === ''
-                        ? 'Choose a department first'
-                        : (yearLevel === '' ? 'Choose a year/grade level first' : 'Choose a student');
                     return;
                 }
 
-                const matches = studentMatchesDepartment(option, department) &&
-                    option.dataset.yearLevel === yearLevel;
+                const matches = option.dataset.department === department;
                 option.hidden = !matches;
                 if (matches) {
-                    matchingStudents++;
+                    matchingCourses++;
                 }
             });
 
-            if (department !== '' && yearLevel !== '' && matchingStudents === 0) {
-                penaltyStudent.options[0].textContent = 'No students in this year level';
+            if (department !== '' && yearLevel !== '' && matchingCourses === 0) {
+                penaltyCourse.options[0].textContent = 'No courses available';
             }
+        }
+
+        function updatePenaltyStudentOptions() {
+            const department = penaltyDepartment.value;
+            const yearLevel = penaltyYearLevel.value;
+            const course = penaltyCourse.value;
+            const placeholder = department === ''
+                ? 'Choose a department first'
+                : (yearLevel === '' ? 'Choose a year/grade level first'
+                    : (course === '' ? 'Choose a course first' : 'No students in this course and year level'));
+            const matchingStudents = department !== '' && yearLevel !== '' && course !== ''
+                ? allStudentOptions.filter(function (option) {
+                    return studentMatchesDepartment(option, department) &&
+                        option.dataset.yearLevel === yearLevel &&
+                        studentMatchesCourse(option, penaltyCourse.selectedOptions[0]);
+                })
+                : [];
+
+            penaltyStudent.replaceChildren(new Option(
+                matchingStudents.length > 0 && department !== '' && yearLevel !== '' && course !== ''
+                    ? 'Choose a student'
+                    : placeholder,
+                ''
+            ));
+            matchingStudents.forEach(function (option) {
+                penaltyStudent.add(option.cloneNode(true));
+            });
+            penaltyStudent.disabled = matchingStudents.length === 0;
         }
 
         penaltyDepartment.addEventListener('change', function () {
             const department = penaltyDepartment.value;
-            const yearLevels = ['1st', '2nd', '3rd', '4th'];
+            const yearLevels = yearOptionsByDepartment[department] || [];
             penaltyYearLevel.replaceChildren(new Option(
                 department === '' ? 'Choose a department first' : 'Choose a year level',
                 ''
@@ -717,9 +912,14 @@ unset($_SESSION['dashboard_error'], $_SESSION['dashboard_success']);
                 penaltyYearLevel.add(new Option(yearLevel, yearLevel));
             });
 
+            updatePenaltyCourseOptions();
             updatePenaltyStudentOptions();
         });
-        penaltyYearLevel.addEventListener('change', updatePenaltyStudentOptions);
+        penaltyYearLevel.addEventListener('change', function () {
+            updatePenaltyCourseOptions();
+            updatePenaltyStudentOptions();
+        });
+        penaltyCourse.addEventListener('change', updatePenaltyStudentOptions);
     }
 
     function setNavigationOpen(isOpen) {

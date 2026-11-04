@@ -123,45 +123,65 @@ unset($_SESSION['refund_center_notice']);
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>Teacher Refund Center | CPC Penalty System</title>
     <style>
-        :root { font-family: Inter, "Segoe UI", Arial, sans-serif; color: #172033; background: #f1f5f9; }
+        :root { font-family: Inter, "Segoe UI", Arial, sans-serif; color: #0f172a; background: #f1f5f9; }
         * { box-sizing: border-box; }
-        body { min-height: 100vh; margin: 0; padding: 28px 16px; background: #f1f5f9; }
-        main { width: min(100%, 1100px); margin: 0 auto; }
-        header, .request { padding: 22px; border: 1px solid #e2e8f0; border-radius: 14px; background: #fff; box-shadow: 0 8px 24px rgba(15, 23, 42, .05); }
+        body { min-height: 100vh; margin: 0; padding: 30px 15px; background: #f1f5f9; }
+        main { width: min(100%, 700px); margin: 0 auto; }
+        header, .request { padding: clamp(21px, 5vw, 34px); border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; box-shadow: 0 10px 28px rgba(15, 23, 42, .06); }
         header { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
         h1, h2, p { margin-top: 0; }
-        h1 { margin-bottom: 5px; font-size: 28px; }
-        h2 { margin-bottom: 14px; font-size: 19px; }
+        h1 { margin: 0; font-size: clamp(24px, 5vw, 30px); }
+        h2 { margin-bottom: 14px; font-size: 17px; }
+        .intro { margin: 9px 0 0; color: #64748b; font-size: 14px; line-height: 1.6; }
         .muted { color: #64748b; }
-        .notice { padding: 12px 14px; margin-bottom: 18px; border: 1px solid #bfdbfe; border-radius: 9px; color: #1e40af; background: #eff6ff; }
-        .request { display: grid; grid-template-columns: minmax(0, 1fr) minmax(240px, 360px); gap: 20px; margin-bottom: 16px; }
-        dl { display: grid; grid-template-columns: 170px 1fr; gap: 9px 14px; margin: 0 0 18px; }
-        dt { color: #64748b; } dd { margin: 0; overflow-wrap: anywhere; font-weight: 600; }
+        .notice { padding: 12px 14px; margin-bottom: 18px; border: 1px solid #bfdbfe; border-radius: 9px; color: #1e40af; background: #eff6ff; font-size: 14px; }
+        .request { display: grid; grid-template-columns: minmax(0, 1fr) 110px; align-items: start; gap: 12px; margin-bottom: 14px; }
+        .request h2 { color: #1d2939; }
+        .request-facts { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; margin: 0 0 16px; }
+        .request-facts div { min-width: 0; padding: 8px 9px; border: 1px solid #e6eaf0; border-radius: 8px; background: #f8fafc; }
+        dt { color: #64748b; font-size: 10px; font-weight: 700; text-transform: uppercase; }
+        dd { margin: 2px 0 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 600; }
+        .request-facts .reason-fact { grid-column: span 2; }
+        .request-facts .status-fact dd { margin-top: 4px; }
         .proof-button { display: block; padding: 0; border: 0; border-radius: 9px; background: transparent; cursor: zoom-in; }
-        .proof { display: block; width: 140px; height: 110px; object-fit: cover; border: 1px solid #e2e8f0; border-radius: 9px; background: #f8fafc; }
-        .proof-hint { margin: 7px 0 0; color: #64748b; font-size: 13px; }
+        .proof { display: block; width: 100%; height: 88px; object-fit: cover; border: 1px solid #e2e8f0; border-radius: 8px; background: #f8fafc; }
+        .proof-hint { margin: 5px 0 0; color: #64748b; font-size: 11px; line-height: 1.4; }
         .image-modal { width: min(94vw, 1100px); max-width: none; max-height: 94vh; padding: 18px; border: 0; border-radius: 12px; background: #0f172a; }
         .image-modal::backdrop { background: rgba(15, 23, 42, .85); }
         .image-modal img { display: block; max-width: 100%; max-height: calc(94vh - 70px); margin: 0 auto; object-fit: contain; }
         .image-modal button { display: block; margin: 0 0 12px auto; padding: 7px 12px; border: 1px solid #64748b; border-radius: 7px; color: #fff; background: #1e293b; font: inherit; cursor: pointer; }
-        .status { display: inline-block; padding: 4px 9px; border-radius: 999px; background: #f1f5f9; font-size: 13px; font-weight: 700; }
+        .status { display: inline-block; padding: 3px 7px; border-radius: 999px; background: #f1f5f9; font-size: 11px; font-weight: 700; }
         .status.pending { color: #1d4ed8; background: #eff6ff; }
-        .actions { display: flex; gap: 9px; }
-        .button { min-height: 40px; padding: 0 14px; border: 0; border-radius: 8px; color: #fff; background: #15803d; font: inherit; font-weight: 650; cursor: pointer; }
-        .button.reject { background: #b42318; }
+        .actions { display: flex; flex-wrap: wrap; gap: 7px; }
+        .button { min-height: 36px; padding: 0 12px; border: 1px solid #2563eb; border-radius: 8px; color: #fff; background: #2563eb; font: inherit; font-size: 12px; font-weight: 650; cursor: pointer; }
+        .button:hover { border-color: #1d4ed8; background: #1d4ed8; }
+        .button.reject { border-color: #fecaca; color: #b91c1c; background: #fff; }
+        .button.reject:hover { border-color: #fecaca; color: #991b1b; background: #fef2f2; }
         .actions form { margin: 0; }
-        .payout-form { display: grid; max-width: 460px; gap: 10px; }
-        .payout-form label { display: grid; gap: 6px; color: #334155; font-size: 13px; font-weight: 650; }
-        .payout-form input { min-height: 40px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; }
+        .payout-form { display: grid; max-width: 460px; gap: 7px; }
+        .payout-form label { display: grid; gap: 7px; margin: 12px 0; color: #334155; font-size: 13px; font-weight: 650; }
+        .payout-form input { min-height: 40px; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 8px; font: inherit; font-size: 14px; }
+        .payout-form input:focus { outline: none; border-color: #60a5fa; box-shadow: 0 0 0 3px rgba(96, 165, 250, .2); }
         a { color: #1d4ed8; }
-        @media (max-width: 700px) { .request { grid-template-columns: 1fr; } dl { grid-template-columns: 1fr; gap: 4px; } dd { margin-bottom: 8px; } }
+        @media (max-width: 760px) {
+            .request { grid-template-columns: minmax(0, 1fr) 100px; gap: 10px; }
+        }
+        @media (max-width: 560px) {
+            body { padding: 18px 11px; }
+            header, .request { padding: 18px; }
+            .request { grid-template-columns: 1fr; }
+            .request-facts { gap: 6px; }
+            .request-facts .reason-fact { grid-column: 1 / -1; }
+            .proof-button { width: min(100%, 180px); }
+            .header-link { width: 100%; }
+        }
     </style>
 </head>
 <body>
     <main>
         <header>
-            <div><h1>Teacher Refund Center</h1><p class="muted">Review requests, send approved refunds manually through GCash, then record the transfer.</p></div>
-            <a href="teachers_dashboard.php">Back to Teacher Dashboard</a>
+            <div><h1>Teacher Refund Center</h1><p class="intro">Review requests, send approved refunds manually through GCash, then record the transfer.</p></div>
+            <a class="header-link" href="teachers_dashboard.php">Back to Teacher Dashboard</a>
         </header>
         <?php if ($notice !== ''): ?><p class="notice" role="status"><?= htmlspecialchars($notice, ENT_QUOTES, 'UTF-8') ?></p><?php endif; ?>
         <?php if (!$requests): ?>
@@ -170,20 +190,19 @@ unset($_SESSION['refund_center_notice']);
             <?php foreach ($requests as $request): ?>
                 <article class="request">
                     <section>
-                        <h2>Request #<?= (int) $request['id'] ?> — <?= htmlspecialchars($request['full_name'], ENT_QUOTES, 'UTF-8') ?></h2>
-                        <dl>
-                            <dt>Student name</dt><dd><?= htmlspecialchars($request['full_name'], ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Student ID</dt><dd><?= htmlspecialchars($request['student_id'] ?? '—', ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Student contact number</dt><dd><?= htmlspecialchars($request['cellphone'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>GCash refund number</dt><dd><?= htmlspecialchars($request['payout_number'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Penalty</dt><dd><?= htmlspecialchars($request['title'], ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Refund amount</dt><dd>₱<?= number_format((float) $request['amount'], 2) ?> (full penalty amount)</dd>
-                            <dt>Payment status</dt><dd><?= htmlspecialchars(ucfirst($request['payment_status']), ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Reference on payment</dt><dd><?= htmlspecialchars($request['recorded_reference'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Reference in request</dt><dd><?= htmlspecialchars($request['reference_number'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Student's reason</dt><dd><?= nl2br(htmlspecialchars($request['reason'] ?? 'No reason provided', ENT_QUOTES, 'UTF-8')) ?></dd>
-                            <dt>Submitted</dt><dd><?= htmlspecialchars($request['created_at'], ENT_QUOTES, 'UTF-8') ?></dd>
-                            <dt>Review status</dt><dd><span class="status <?= $request['status'] === 'pending' ? 'pending' : '' ?>"><?= htmlspecialchars(ucfirst($request['status']), ENT_QUOTES, 'UTF-8') ?></span></dd>
+                        <h2>Request #<?= (int) $request['id'] ?> · <?= htmlspecialchars($request['full_name'], ENT_QUOTES, 'UTF-8') ?></h2>
+                        <dl class="request-facts">
+                            <div><dt>Student ID</dt><dd><?= htmlspecialchars($request['student_id'] ?? '—', ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div><dt>Contact</dt><dd><?= htmlspecialchars($request['cellphone'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div><dt>GCash payout</dt><dd><?= htmlspecialchars($request['payout_number'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div><dt>Penalty</dt><dd><?= htmlspecialchars($request['title'], ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div><dt>Refund amount</dt><dd>₱<?= number_format((float) $request['amount'], 2) ?> · Full penalty</dd></div>
+                            <div class="status-fact"><dt>Payment status</dt><dd><?= htmlspecialchars(ucfirst($request['payment_status']), ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div><dt>Payment reference</dt><dd><?= htmlspecialchars($request['recorded_reference'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div><dt>Request reference</dt><dd><?= htmlspecialchars($request['reference_number'] ?: 'Not provided', ENT_QUOTES, 'UTF-8') ?></dd></div>
+                            <div class="status-fact"><dt>Review status</dt><dd><span class="status <?= $request['status'] === 'pending' ? 'pending' : '' ?>"><?= htmlspecialchars(ucfirst($request['status']), ENT_QUOTES, 'UTF-8') ?></span></dd></div>
+                            <div class="reason-fact"><dt>Student's reason</dt><dd><?= nl2br(htmlspecialchars($request['reason'] ?? 'No reason provided', ENT_QUOTES, 'UTF-8')) ?></dd></div>
+                            <div><dt>Submitted</dt><dd><?= htmlspecialchars($request['created_at'], ENT_QUOTES, 'UTF-8') ?></dd></div>
                         </dl>
                         <?php if ($request['status'] === 'pending'): ?>
                             <div class="actions">

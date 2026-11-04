@@ -3,6 +3,10 @@ require_once __DIR__ . '/auth.php';
 require_login();
 
 $user = $_SESSION['user'];
+$courseDisplay = student_course_display_name((string) ($user['course'] ?? ''));
+if ($courseDisplay === '' && in_array($user['department'] ?? '', ['IT', 'CE', 'EE'], true)) {
+	$courseDisplay = student_course_display_name((string) $user['department']);
+}
 
 if (empty($_SESSION['settings_csrf_token'])) {
 	$_SESSION['settings_csrf_token'] = bin2hex(random_bytes(32));
@@ -103,26 +107,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 			if ($uploadedImage !== null) {
 				$_SESSION['user']['profile_picture'] = $uploadedImage;
 			}
-			$_SESSION['settings_success'] = $uploadedImage !== null
-				? 'Profile details and photo saved.'
-				: 'Profile details saved.';
 		} elseif ($action === 'remove_profile_picture') {
 			$statement = database()->prepare('UPDATE users SET profile_picture = NULL WHERE id = :id');
 			$statement->execute(['id' => (int) $user['id']]);
 			$_SESSION['user']['profile_picture'] = null;
-			$_SESSION['settings_success'] = 'Profile photo removed.';
 		} else {
 			throw new RuntimeException('Choose a valid profile action.');
 		}
 	} catch (RuntimeException $exception) {
-		$_SESSION['settings_error'] = $exception->getMessage();
+		error_log('Profile settings update rejected: ' . $exception->getMessage());
 	} catch (PDOException $exception) {
-		$_SESSION['settings_error'] = $exception->getCode() === '23000'
-			? 'That username is already in use. Choose another one.'
-			: 'The profile could not be saved. Please try again.';
+		error_log('Profile settings update failed: ' . $exception->getMessage());
 	} catch (Throwable $exception) {
 		error_log('Profile settings update failed: ' . $exception->getMessage());
-		$_SESSION['settings_error'] = 'The requested settings could not be saved.';
 	}
 
 	$_SESSION['settings_csrf_token'] = bin2hex(random_bytes(32));
@@ -131,8 +128,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 
 $user = $_SESSION['user'];
-$error = $_SESSION['settings_error'] ?? '';
-$success = $_SESSION['settings_success'] ?? '';
 unset($_SESSION['settings_error'], $_SESSION['settings_success']);
 ?>
 <!doctype html>
@@ -165,9 +160,6 @@ unset($_SESSION['settings_error'], $_SESSION['settings_success']);
 		h1 { margin: 0; color: #0f172a; font-size: clamp(27px, 3vw, 34px); font-weight: 750; letter-spacing: -.6px; }
 		.subtitle { margin: 8px 0 0; color: #64748b; font-size: 14px; }
 		.profile-card { overflow: hidden; background: #fff; border: 1px solid #e2e8f0; border-radius: 16px; box-shadow: 0 8px 28px rgba(15, 23, 42, .05); }
-		.alert { display: flex; align-items: flex-start; gap: 10px; padding: 13px 16px; margin: 20px 24px 0; border: 1px solid #fecaca; border-radius: 10px; color: #b91c1c; background: #fef2f2; font-size: 14px; line-height: 1.5; }
-		.alert.success { border-color: #bbf7d0; color: #15803d; background: #f0fdf4; }
-		.alert-icon { flex: 0 0 auto; font-size: 17px; line-height: 1.2; }
 		.photo-section { display: flex; flex-direction: column; align-items: center; padding: 28px 24px 26px; text-align: center; }
 		.avatar { display: grid; width: 132px; height: 132px; place-items: center; overflow: hidden; border: 4px solid #eff6ff; border-radius: 50%; color: #1d4ed8; background: #dbeafe; font-size: 40px; font-weight: 700; object-fit: cover; }
 		.photo-name { margin: 14px 0 7px; color: #0f172a; font-size: 19px; font-weight: 700; }
@@ -211,7 +203,6 @@ unset($_SESSION['settings_error'], $_SESSION['settings_success']);
 		@media (max-width: 560px) {
 			.content { padding: 23px 13px 32px; }
 			.page-header { margin-bottom: 18px; }
-			.alert { margin: 14px 14px 0; }
 			.photo-section { padding: 23px 15px 21px; }
 			.avatar { width: 122px; height: 122px; }
 			.form-section { padding: 21px 16px 18px; }
@@ -250,12 +241,10 @@ unset($_SESSION['settings_error'], $_SESSION['settings_success']);
 				<a href="teachers_dashboard.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg><span>Teacher Dashboard</span></a>
 				<a href="teachers_dashboard.php?view=students"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M16 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="10" cy="7" r="4"/><path d="M20 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75"/></svg><span>Students</span></a>
 				<a href="teachers_dashboard.php?view=penalties"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l4 4v14H3V3h4Z"/><path d="M7 3v5h10V3M7 13h10M7 17h7"/></svg><span>Penalty Records</span></a>
-				<a href="teachers_dashboard.php#messages"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg><span>Messages</span></a>
 			<?php else: ?>
 				<a href="student_dashboard.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="8" height="8" rx="2"/><rect x="13" y="3" width="8" height="5" rx="2"/><rect x="13" y="10" width="8" height="11" rx="2"/><rect x="3" y="13" width="8" height="8" rx="2"/></svg><span>Student Dashboard</span></a>
 				<a href="student_dashboard.php#penalties"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 3h10l4 4v14H3V3h4Z"/><path d="M7 3v5h10V3M7 13h10M7 17h7"/></svg><span>My Penalties</span></a>
 				<a href="tuition.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18M7 15h3"/></svg><span>Tuition Balance</span></a>
-				<a href="student_dashboard.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9h.5a8.5 8.5 0 0 1 8 8v.5Z"/></svg><span>Messages</span></a>
 			<?php endif; ?>
 			<a href="settings.php" class="active" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="m19.4 15 .1.1 1.4 1.1-1.4 2.4-1.7-.6a8 8 0 0 1-1.4.8l-.3 1.8h-2.8l-.3-1.8a8 8 0 0 1-1.4-.8l-1.7.6-1.4-2.4 1.4-1.1a7 7 0 0 1 0-1.7l-1.4-1.1 1.4-2.4 1.7.6a8 8 0 0 1 1.4-.8l.3-1.8h2.8l.3 1.8a8 8 0 0 1 1.4.8l1.7-.6 1.4 2.4-1.4 1.1a7 7 0 0 1 0 1.7Z"/></svg><span>Settings &amp; Profile</span></a>
 			<a class="logout-link" href="logout.php"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M12 3h6a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-6"/></svg><span>Logout</span></a>
@@ -269,12 +258,6 @@ unset($_SESSION['settings_error'], $_SESSION['settings_success']);
 			<p class="subtitle">Manage your personal information and account details.</p>
 		</header>
 		<section class="profile-card" aria-label="Profile settings">
-			<?php if ($error): ?>
-				<div class="alert" role="alert"><span class="alert-icon" aria-hidden="true">!</span><span><?= htmlspecialchars($error, ENT_QUOTES, 'UTF-8') ?></span></div>
-			<?php endif; ?>
-			<?php if ($success): ?>
-				<div class="alert success" role="status"><span class="alert-icon" aria-hidden="true">✓</span><span><?= htmlspecialchars($success, ENT_QUOTES, 'UTF-8') ?></span></div>
-			<?php endif; ?>
 			<form id="settingsForm" method="post" action="settings.php" enctype="multipart/form-data">
 				<input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
 				<input type="hidden" name="action" value="update_profile">
@@ -306,7 +289,7 @@ unset($_SESSION['settings_error'], $_SESSION['settings_success']);
 						<label class="field" for="cellphone">Cellphone Number<input id="cellphone" type="tel" name="cellphone" maxlength="30" value="<?= htmlspecialchars($user['cellphone'] ?? '', ENT_QUOTES, 'UTF-8') ?>" autocomplete="tel" required></label>
 						<label class="field" for="role">Role<input id="role" value="<?= htmlspecialchars(ucfirst($role), ENT_QUOTES, 'UTF-8') ?>" readonly></label>
 						<?php if ($role === 'student'): ?>
-							<label class="field" for="course">Course<input id="course" value="<?= htmlspecialchars($user['course'] ?? '', ENT_QUOTES, 'UTF-8') ?>" readonly aria-readonly="true"></label>
+							<label class="field" for="course">Course<input id="course" value="<?= htmlspecialchars($courseDisplay, ENT_QUOTES, 'UTF-8') ?>" readonly aria-readonly="true"></label>
 							<label class="field" for="department">Department<input id="department" value="<?= htmlspecialchars($user['department'] ?? '', ENT_QUOTES, 'UTF-8') ?>" readonly aria-readonly="true"></label>
 							<label class="field" for="year_level">Year level
 								<select id="year_level" name="year_level" required>
