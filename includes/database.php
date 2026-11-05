@@ -7,14 +7,20 @@ function database(): PDO
         return $connection;
     }
 
-    $host = getenv('CPC_DB_HOST') ?: '127.0.0.1';
-    $name = getenv('CPC_DB_NAME') ?: 'cpc_penalty';
-    $user = getenv('CPC_DB_USER') ?: 'root';
-    $password = getenv('CPC_DB_PASSWORD') ?: '';
-    $port = filter_var(getenv('CPC_DB_PORT') ?: '3306', FILTER_VALIDATE_INT, [
-        'options' => ['min_range' => 1, 'max_range' => 65535],
-    ]);
-
+  $host = getenv('CPC_DB_HOST') ?: getenv('DB_HOST') ?: '127.0.0.1';
+$name = getenv('CPC_DB_NAME') ?: getenv('DB_NAME') ?: 'cpc_penalty';
+$user = getenv('CPC_DB_USER') ?: getenv('DB_USER') ?: 'root';
+$password = getenv('CPC_DB_PASSWORD') ?: getenv('DB_PASSWORD') ?: '';
+$port = filter_var(
+    getenv('CPC_DB_PORT') ?: getenv('DB_PORT') ?: '3306',
+    FILTER_VALIDATE_INT,
+    [
+        'options' => [
+            'min_range' => 1,
+            'max_range' => 65535
+        ],
+    ]
+);
     if ($port === false) {
         throw new RuntimeException('CPC_DB_PORT must be a valid TCP port.');
     }

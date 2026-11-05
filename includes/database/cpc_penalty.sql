@@ -1,6 +1,3 @@
-CREATE DATABASE IF NOT EXISTS cpc_penalty CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
-USE cpc_penalty;
-
 CREATE TABLE IF NOT EXISTS users (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
     username VARCHAR(100) NOT NULL UNIQUE,
@@ -15,11 +12,6 @@ CREATE TABLE IF NOT EXISTS users (
     profile_picture LONGBLOB NULL,
     created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
-
-ALTER TABLE users ADD COLUMN IF NOT EXISTS cellphone VARCHAR(30) NULL AFTER student_id;
-ALTER TABLE users MODIFY department VARCHAR(30) NULL;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS course VARCHAR(150) NULL AFTER department;
-ALTER TABLE users ADD COLUMN IF NOT EXISTS year_level VARCHAR(10) NULL AFTER course;
 
 CREATE TABLE IF NOT EXISTS penalties (
     id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
@@ -48,10 +40,13 @@ CREATE TABLE IF NOT EXISTS tuition_balances (
     updated_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     CONSTRAINT fk_tuition_balances_student FOREIGN KEY (student_id) REFERENCES users(id) ON DELETE CASCADE
 );
-ALTER TABLE tuition_balances ADD COLUMN IF NOT EXISTS pending_payment_amount DECIMAL(10,2) NULL AFTER amount;
 
-INSERT IGNORE INTO users (username, password, full_name, student_id, role, department)
-VALUES ('teacher01', '$2y$10$WVneWJG1IrEljPa3zE9D2ug/S0RgQfoopDSe1JfKsCj1NuwkZJJ8C', 'System Teacher', NULL, 'teacher', NULL);
+INSERT IGNORE INTO users
+(username,password,full_name,student_id,role,department)
+VALUES
+('teacher01','$2y$10$WVneWJG1IrEljPa3zE9D2ug/S0RgQfoopDSe1JfKsCj1NuwkZJJ8C','System Teacher',NULL,'teacher',NULL);
 
-INSERT IGNORE INTO users (username, password, full_name, student_id, role, department)
-VALUES ('zyros', '$2y$10$c99Ar106YgtdrOPhR7UN0OxiRKQonT/PtfN4jGBhksrdxq7./ANO.', 'Zyros', 'ZYROS001', 'student', 'IT');
+INSERT IGNORE INTO users
+(username,password,full_name,student_id,role,department)
+VALUES
+('zyros','$2y$10$c99Ar106YgtdrOPhR7UN0OxiRKQonT/PtfN4jGBhksrdxq7./ANO.','Zyros','ZYROS001','student','IT');
