@@ -1,6 +1,10 @@
 <?php
 require_once __DIR__ . '/includes/auth.php';
-ensure_student_academic_fields();
+try {
+    ensure_student_academic_fields();
+} catch (PDOException $exception) {
+    $_SESSION['login_error'] = 'The database is not ready. Configure the MySQL environment variables and import cpc_penalty.sql.';
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $login = trim($_POST['username'] ?? '');

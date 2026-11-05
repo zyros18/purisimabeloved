@@ -11,9 +11,16 @@ function database(): PDO
     $name = getenv('CPC_DB_NAME') ?: 'cpc_penalty';
     $user = getenv('CPC_DB_USER') ?: 'root';
     $password = getenv('CPC_DB_PASSWORD') ?: '';
+    $port = filter_var(getenv('CPC_DB_PORT') ?: '3306', FILTER_VALIDATE_INT, [
+        'options' => ['min_range' => 1, 'max_range' => 65535],
+    ]);
+
+    if ($port === false) {
+        throw new RuntimeException('CPC_DB_PORT must be a valid TCP port.');
+    }
 
     $connection = new PDO(
-        "mysql:host={$host};dbname={$name};charset=utf8mb4",
+        "mysql:host={$host};port={$port};dbname={$name};charset=utf8mb4",
         $user,
         $password,
         [

@@ -9,7 +9,23 @@ This XAMPP PHP application provides separate dashboards for students and teacher
 3. Open [http://localhost/login.php](http://localhost/login.php) and sign in with an account for the appropriate role.
 4. After login, students are sent to `includes/student_dashboard.php` and teachers to `includes/teachers_dashboard.php`.
 
-If this project is installed in a subfolder under `htdocs`, include that folder in the URL, for example `http://localhost/my-project/login.php`.
+If this project is installed in a subfolder under `htdocs`, include that folder in the URL, for example `http://localhost/login.php`.
+
+## Deploy to Render
+
+1. Push the project to the GitHub branch you want to deploy.
+2. In Render, create a **Web Service** from that repository. Select the **Docker** runtime and the repository's root `Dockerfile`.
+3. The Docker image configures Apache to listen on port `10000`, Render's default web-service port. No `PORT` environment variable is needed.
+4. Configure an external MySQL database. This application uses MySQL and cannot connect to Render PostgreSQL. Import `includes/database/cpc_penalty.sql` into the MySQL database.
+5. Add these environment variables to the Render service using the connection details from your MySQL provider:
+   - `CPC_DB_HOST`
+   - `CPC_DB_PORT` (usually `3306`)
+   - `CPC_DB_NAME`
+   - `CPC_DB_USER`
+   - `CPC_DB_PASSWORD`
+6. Deploy the service. Render provides an HTTPS `onrender.com` URL and manages its TLS certificate. Add a custom domain in Render if desired, then configure the DNS records Render provides.
+
+The login page displays a setup message if MySQL is not configured or reachable; sign-in will work after the database is available and its schema is imported.
 
 ## Student dashboard
 
